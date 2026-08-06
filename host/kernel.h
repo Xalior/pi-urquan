@@ -16,10 +16,10 @@
 //            other core may touch a device at all. It also runs the shim's
 //            servo, which answers the other cores' marshalled calls.
 //   core 1   the APPLICATION core. The game, alone. The Ur-Quan Masters is
-//            internally multi-threaded, and all of its threads live on this
-//            one core: host/circle_threads.cpp gives them a cooperative
-//            scheduler of their own. Every platform call any of them makes
-//            is marshalled back to core 0 by the shim.
+//            internally multi-threaded and creates its threads through
+//            SDL, so they are the shim's threads and all of them live on
+//            this one core. Every platform call any of them makes is
+//            marshalled back to core 0 by the shim.
 //   core 2   the elected PRESENTATION core. It consumes the shim's frame
 //            mailbox: scale, compose, present. Electing it is this
 //            kernel's decision, not the library's — the library never
