@@ -1,0 +1,18 @@
+[submodule "circle-libsdl2"]
+	path = circle-libsdl2
+	url = https://github.com/Xalior/circle-libsdl2.git
+[submodule "uqm"]
+	path = uqm
+	url = https://git.code.sf.net/p/sc2/uqm
+[submodule "zlib"]
+	path = zlib
+	url = https://github.com/madler/zlib.git
+[submodule "libpng"]
+	path = libpng
+	url = https://github.com/pnggroup/libpng.git
+[submodule "libogg"]
+	path = libogg
+	url = https://github.com/xiph/ogg.git
+[submodule "libvorbis"]
+	path = libvorbis
+	url = https://github.com/xiph/vorbis.git
