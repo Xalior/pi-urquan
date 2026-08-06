@@ -397,23 +397,51 @@ TShutdownMode CKernel::Run(void)
         // here: the servo task is what answers the application core, feeds
         // the sound device and pumps USB, and it only runs when this loop
         // gives it the core.
+        //
+        // THE FIRST YIELDS ARE BRACKETED, and that bracket is the whole
+        // instrument. The servo runs each marshalled call inline in its own
+        // loop, so a handler that never returns takes the servo with it, and
+        // a servo that never returns never yields — this task is then never
+        // scheduled again. Printing BEFORE the yield and again after it means
+        // an unmatched "about to yield" is the fatal one, and the line that
+        // carries it already names what the application core had in flight.
+        //
+        // That is the same discrimination as the library's calls
+        // started-versus-served, reached without reading either counter: an
+        // unmatched bracket IS started == served + 1. It matters that it gets
+        // there differently, because the library's own stall report travels
+        // by the log ring, and the ring is drained by the core that has
+        // stopped. This line is core 0's own logger writing straight to the
+        // device core 0 owns, so it is on the wire before the yield that
+        // never returns.
+        //
+        // Bounded, because a yield happens thousands of times a second and
+        // the serial port carries a few dozen lines. After the loud ones it
+        // falls back to reporting on change and on a beat.
+        unsigned nYield = 0;
         unsigned nSeen = BootTraceRead();
-        bool bFirstSlice = true;
         unsigned nNextBeat = m_Timer.GetTicks() + 2 * HZ;
         while (!s_AppDone.load(std::memory_order_acquire))
         {
+            const bool bLoud = rapi_trace_boot && ++nYield <= 40;
+
+            if (bLoud)
+            {
+                m_Logger.Write(From, LogNotice,
+                               "yield %u: about to yield | app core at %u (%s) | "
+                               "service: %s, %u done",
+                               nYield, BootTraceRead(),
+                               BootTraceName(BootTraceRead()),
+                               BootTraceServiceName(), BootTraceServicesDone());
+            }
+
             m_Scheduler.Yield();
+
+            if (bLoud)
+                m_Logger.Write(From, LogNotice, "yield %u: returned", nYield);
 
             if (!rapi_trace_boot)
                 continue;
-
-            if (bFirstSlice)
-            {
-                bFirstSlice = false;
-                m_Logger.Write(From, LogNotice,
-                               "the scheduler gave core 0 a slice back");
-                ReportAppCore("scheduled");
-            }
 
             const unsigned nNow = BootTraceRead();
             if (nNow != nSeen)
