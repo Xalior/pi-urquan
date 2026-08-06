@@ -41,29 +41,27 @@ Three processor cores are given separate work:
 
 ## State of this port
 
-**The whole game compiles clean for all three boards, and it does not link
-yet.** It has never been run on hardware, and no frame has ever been
-rendered.
+**The whole game compiles and links for all three boards.** It has never
+been run on hardware, and no frame has ever been rendered. What follows
+describes what the code does, not what has been observed.
 
-What is outstanding is not in this repository. Four SDL2 entry points the
-game calls are not yet implemented in circle-libsdl2:
+Everything the game asks of SDL2 is answered by circle-libsdl2: the software
+surface layer it composes its screens with — blits, colour keys, per-surface
+alpha, 8-bit paletted sources — the renderer, its textures and its logical
+size, threads, mutexes, condition variables and semaphores, audio, keyboard,
+mouse and game controllers. There is no reimplementation of any of it here.
 
-| Function | What the game does with it |
+The game's own configuration for this build:
+
+| Choice | Setting |
 |---|---|
-| `SDL_RenderSetLogicalSize` | The game's whole scaling story: it renders 320x240, or 640x480 for its 2x scalers, and asks the renderer to letterbox that onto the display. |
-| `SDL_SetWindowFullscreen` | Set at window creation, and toggled when the player switches between fullscreen and windowed. |
-| `SDL_SetWindowSize` | Paired with the above on the way back to windowed. |
-| `SDL_CloseAudio` | SDL2's 1.2-compatible audio close, called on an error path in the game's mixer backend. |
-
-These belong in the SDL2 layer and are being added there. When that lands,
-this repository advances its `circle-libsdl2` pin and the link completes.
-Nothing is being worked around locally in the meantime.
-
-Everything else the game needs from SDL2 is present: the software surface
-layer it composes its screens with — blits, colour keys, per-surface alpha,
-8-bit paletted sources — the renderer and its textures, threads, mutexes,
-condition variables and semaphores, audio, keyboard, mouse and game
-controllers.
+| Graphics | The software renderer, uploading finished 320x240 frames to a streaming texture. |
+| Sound | The game's own mixer over SDL audio. Not OpenAL, which does not exist here. |
+| Ogg decoding | libvorbis. |
+| Module music | The MikMod the game vendors. |
+| Content packages | Read as ZIP archives, through zlib. |
+| Threads | SDL threads. |
+| Netplay | Off. There is no network stack under this. |
 
 ## What you need to supply
 

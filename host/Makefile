@@ -499,7 +499,7 @@ LIBS = --whole-archive $(SHIM)/libSDL2-$(RAPI_BOARD).a --no-whole-archive \
 WRAPPED_SYSCALLS = \
 	_open _close _read _write _lseek _fstat _stat lstat _unlink _rename \
 	_fcntl mkdir chdir getcwd dup dup2 \
-	opendir readdir closedir rewinddir
+	opendir readdir readdir_r closedir rewinddir
 
 # Nothing named SDL_ is wrapped or replaced here. The surface layer the game
 # draws through — software blits, colour keys, per-surface alpha, 8-bit

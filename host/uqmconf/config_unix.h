@@ -32,7 +32,10 @@
  * whenever a switch is left off.
  */
 #ifndef RAPI_GAME_DIR
-#error RAPI_GAME_DIR is not defined — see this port's host/Makefile
+/* The apostrophe of "port's" is spelled out: the preprocessor tokenises an
+ * #error's text, and a lone apostrophe in it warns about an unterminated
+ * character constant on every translation unit that includes this file. */
+#error RAPI_GAME_DIR is not defined - see the host Makefile of this port
 #endif
 
 /* Directory where the UQM game data is located */
@@ -57,8 +60,12 @@
 /* #undef WORDS_BIGENDIAN */
 
 /* Defined if your system has readdir_r of its own.
- * newlib does not, so port.c supplies one. */
-/* #undef HAVE_READDIR_R */
+ *
+ * newlib's Circle port does: it is declared in <dirent.h> and defined in the
+ * same object file as the rest of the directory calls, which this kernel
+ * links for opendir and readdir regardless. Left undefined, port.c supplies
+ * its own and the link fails with a duplicate definition. */
+#define HAVE_READDIR_R
 
 /* Defined if your system has setenv of its own.
  * Spelled with a value because SDL's own config header defines the same

@@ -423,6 +423,35 @@ int __wrap_closedir(DIR *dir)
     return 0;
 }
 
+// readdir_r is the reentrant form, and the game's uio filesystem layer reads
+// every directory through it.
+//
+// It is wrapped rather than left alone because the C library's own version
+// calls readdir INSIDE the object that defines both. --wrap renames undefined
+// references, and that call is not one, so the library's readdir_r would
+// reach the genuine readdir and drive FatFs from whichever core asked — which
+// off core 0 is exactly what this file exists to prevent.
+//
+// Written on top of the wrapper above, so both cores' paths are inherited
+// rather than repeated. The caller supplies the storage, which is the whole
+// point of the reentrant form, so the shared buffer readdir hands back is
+// copied out before returning.
+int __wrap_readdir_r(DIR *dir, struct dirent *entry, struct dirent **result)
+{
+    errno = 0;
+
+    struct dirent *found = __wrap_readdir(dir);
+    if (found == nullptr)
+    {
+        *result = nullptr;
+        return errno;   // 0 at the end of the directory, an error otherwise
+    }
+
+    *entry = *found;
+    *result = entry;
+    return 0;
+}
+
 // ---- the residue -----------------------------------------------------------
 //
 // Descriptor-table and path calls with no route through the I/O service.
