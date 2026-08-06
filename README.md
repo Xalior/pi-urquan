@@ -51,6 +51,20 @@ alpha, 8-bit paletted sources — the renderer, its textures and its logical
 size, threads, mutexes, condition variables and semaphores, audio, keyboard,
 mouse and game controllers. There is no reimplementation of any of it here.
 
+It boots on a Raspberry Pi 5 and stops before drawing anything. Bring-up is
+healthy — the card mounts, all four cores start, the display is declared and
+the core split arms — and then the game produces no output at all.
+
+The game parses its command line before it initialises logging, because the
+log file's name is one of the options, so that window is silent by upstream's
+own design and a stop inside it looks identical to a game that never started.
+`host/boottrace.cpp` exists to tell those apart. It is off unless the image's
+defaults block carries `--rapi-trace-boot`.
+
+**Backlog: `host/boottrace.cpp`, the `--rapi-trace-boot` switch and the
+`WRAPPED_TRACE` linker flags are instrumentation and are to be removed once
+the start-up fault is found.**
+
 The game's own configuration for this build:
 
 | Choice | Setting |

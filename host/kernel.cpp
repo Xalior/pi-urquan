@@ -133,6 +133,15 @@ void CSplitCores::Run(unsigned nCore)
         while (!s_AppGate.load(std::memory_order_acquire))
             asm volatile("wfe" ::: "memory");
 
+        // The first thing this core says for itself. It separates a gate
+        // that never opened from a game that started and stopped, and it
+        // proves the log ring carries a line from this core before the game
+        // has had a chance to use it. SDL2Circle_Log, not the kernel's
+        // logger: this is not core 0, and the serial console is a device.
+        if (rapi_trace_boot)
+            SDL2Circle_Log(From, SDL2CIRCLE_LOG_NOTICE,
+                           "application core past the gate, calling the game");
+
         s_AppResult = uqm_main(s_FinalArgc, const_cast<char **>(s_FinalArgv));
 
         s_AppDone.store(1, std::memory_order_release);

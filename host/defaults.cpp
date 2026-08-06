@@ -74,6 +74,7 @@ TDefaultsBlock _uqm_defaults =
 };
 
 int rapi_debug_uart = 0;
+int rapi_trace_boot = 0;
 
 }
 
@@ -87,6 +88,12 @@ static void DispatchKernelSwitch(const char *pSwitch)
         rapi_debug_uart = 1;
         SDL2Circle_Log(From, SDL2CIRCLE_LOG_NOTICE,
                        "--rapi-debug-uart consumed: serial key injection on");
+    }
+    else if (strcmp(pSwitch, "--rapi-trace-boot") == 0)
+    {
+        rapi_trace_boot = 1;
+        SDL2Circle_Log(From, SDL2CIRCLE_LOG_NOTICE,
+                       "--rapi-trace-boot consumed: start-up trace on");
     }
     else if (strncmp(pSwitch, "--rapi-perf=", 12) == 0)
     {

@@ -33,4 +33,11 @@ int DefaultsBuildArgv(const char **pBaked, unsigned nBaked,
 // A bench convenience; off unless asked for.
 extern "C" int rapi_debug_uart;
 
+// Set by --rapi-trace-boot in the block: turns on the start-up trace in
+// boottrace.cpp, which reports the game's first moments. The game parses its
+// command line before it initialises logging, so that window is otherwise
+// silent and a board that stops in it looks identical to one that never
+// started. Off unless asked for. Instrumentation — see the README backlog.
+extern "C" int rapi_trace_boot;
+
 #endif
