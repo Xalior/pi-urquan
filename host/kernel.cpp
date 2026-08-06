@@ -242,6 +242,20 @@ boolean CKernel::Initialize(void)
     return bOK;
 }
 
+// Everything known about the application core, in one line: where it is in
+// the game's start-up, which marshalled call it is parked in if any, how many
+// of those have completed, and how much it has written. Core 0's own logger,
+// which shares nothing with the ring the application core writes into.
+void CKernel::ReportAppCore(const char *pWhen)
+{
+    const unsigned nNow = BootTraceRead();
+    m_Logger.Write(From, LogNotice,
+                   "[%s] app core at %u (%s) | service: %s, %u done | %u writes, %u bytes",
+                   pWhen, nNow, BootTraceName(nNow),
+                   BootTraceServiceName(), BootTraceServicesDone(),
+                   BootTraceAppWrites(), BootTraceAppWriteBytes());
+}
+
 TShutdownMode CKernel::Run(void)
 {
     m_Logger.Write(From, LogNotice, "starting The Ur-Quan Masters");
@@ -351,32 +365,28 @@ TShutdownMode CKernel::Run(void)
         s_AppGate.store(1, std::memory_order_release);
         PublishToOtherCores();
 
-        // A window that watches WITHOUT the scheduler, before yielding once.
+        // TWO WINDOWS, and the difference between them is the point.
         //
-        // The previous instrument watched the progress word from inside the
-        // yield loop. Its first pass ran microseconds after the gate opened,
-        // so the application core had not moved yet and the milestone had not
-        // changed; the heartbeat had just been armed, so that did not fire
-        // either. It printed nothing and yielded — and the board went silent.
+        // The first watches without the scheduler, which proves core 0 is
+        // alive and returning from SDL2Circle_SplitInit. It is deliberately
+        // SHORT. While it runs, the servo does not, so any file operation
+        // the application core makes is unanswerable and that core parks in
+        // it — an artifact of watching, not a fault, and a long window makes
+        // it look like a frozen game. Two seconds is enough to prove the
+        // point and short enough not to tell that lie.
         //
-        // That silence was itself the finding: this task never got another
-        // slice. So the watching happens here instead, on CTimer's busy wait,
-        // which contains no task switch. It depends on nothing but core 0's
-        // own logger and its timer, and it reports whether the application
-        // core is moving even if the scheduler never runs this task again.
+        // The second yields first and reports after, so every line from it
+        // is proof the yield returned, and the LAST line before any silence
+        // names where both cores were when it stopped.
         if (rapi_trace_boot)
         {
             m_Logger.Write(From, LogNotice,
-                           "core 0 past the gate, watching without the scheduler");
-            for (unsigned i = 1; i <= 20; i++)
+                           "core 0 past the gate, watching without the scheduler "
+                           "(the app core cannot be served during this window)");
+            for (unsigned i = 1; i <= 4; i++)
             {
                 CTimer::SimpleMsDelay(500);
-                const unsigned nNow = BootTraceRead();
-                m_Logger.Write(From, LogNotice,
-                               "t+%u.%us app core at %u (%u writes, %u bytes): %s",
-                               i / 2, (i % 2) * 5, nNow,
-                               BootTraceAppWrites(), BootTraceAppWriteBytes(),
-                               BootTraceName(nNow));
+                ReportAppCore("no-sched");
             }
             m_Logger.Write(From, LogNotice,
                            "core 0 yielding to the scheduler now — any line after "
@@ -387,14 +397,9 @@ TShutdownMode CKernel::Run(void)
         // here: the servo task is what answers the application core, feeds
         // the sound device and pumps USB, and it only runs when this loop
         // gives it the core.
-        //
-        // The yield comes FIRST and the reporting after it, so that a line
-        // from inside this loop is proof the yield returned. Reported with
-        // core 0's own logger, which writes straight to the device it owns
-        // and shares nothing with the application core's log ring.
         unsigned nSeen = BootTraceRead();
         bool bFirstSlice = true;
-        unsigned nNextBeat = m_Timer.GetTicks() + 5 * HZ;
+        unsigned nNextBeat = m_Timer.GetTicks() + 2 * HZ;
         while (!s_AppDone.load(std::memory_order_acquire))
         {
             m_Scheduler.Yield();
@@ -407,23 +412,20 @@ TShutdownMode CKernel::Run(void)
                 bFirstSlice = false;
                 m_Logger.Write(From, LogNotice,
                                "the scheduler gave core 0 a slice back");
+                ReportAppCore("scheduled");
             }
 
             const unsigned nNow = BootTraceRead();
             if (nNow != nSeen)
             {
                 nSeen = nNow;
-                nNextBeat = m_Timer.GetTicks() + 5 * HZ;
-                m_Logger.Write(From, LogNotice,
-                               "app core progress %u: %s",
-                               nSeen, BootTraceName(nSeen));
+                nNextBeat = m_Timer.GetTicks() + 2 * HZ;
+                ReportAppCore("moved");
             }
             else if (m_Timer.GetTicks() >= nNextBeat)
             {
-                nNextBeat = m_Timer.GetTicks() + 5 * HZ;
-                m_Logger.Write(From, LogNotice,
-                               "app core still at %u: %s",
-                               nSeen, BootTraceName(nSeen));
+                nNextBeat = m_Timer.GetTicks() + 2 * HZ;
+                ReportAppCore("beat");
             }
         }
         res = s_AppResult;

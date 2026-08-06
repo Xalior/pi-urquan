@@ -52,32 +52,23 @@ size, threads, mutexes, condition variables and semaphores, audio, keyboard,
 mouse and game controllers. There is no reimplementation of any of it here.
 
 It boots on a Raspberry Pi 5 and stops before drawing anything, and the cause
-is not in this repository.
+is not yet known.
 
-The game itself runs. Instrumented, it reaches the point past its own logging
-setup within half a second of the application core being released. What stops
-is the HARDWARE core: it never returns from the scheduler, so nothing it owns
-is serviced again — USB is never enumerated, video never comes up, and the
-lines the game writes are never carried out of the ring they are queued in.
+What is established: the game itself starts. Instrumented, the application
+core is released, enters the game and gets past the game's own logging setup
+within half a second. The hardware core is healthy for as long as it is
+watched directly. It then yields to the scheduler and is never heard from
+again — nothing it owns is serviced after that, so USB is never enumerated
+and video never comes up.
 
-The mechanism is a livelock between a producer that cannot block and a
-consumer that is not bounded. The library's log ring drops a line when it is
-full rather than waiting, so the application core produces at processor speed;
-the hardware core's drain loop runs until that ring is empty and puts every
-line down a 115200-baud serial port on the way. A game that logs faster than
-the port can carry never lets the drain finish, and the servo never reaches
-the yield at the bottom of its loop. Games that log little at start-up drain
-between bursts and never meet it.
-
-The fix belongs in the library's drain, which needs a bound on the work it
-does per pass. `host/boottrace.cpp` and the two `--rapi-` switches below exist
-to demonstrate that, and are not a fix.
+`host/boottrace.cpp` and the `--rapi-` switches below exist to narrow that
+down, and none of them is a fix.
 
 **Backlog: `host/boottrace.cpp`, `host/boottrace.h`, the `--rapi-trace-boot`
-and `--rapi-quiet-app` switches, the progress and write counters core 0 reads
-in `host/kernel.cpp`, the counting branch in `host/circle_syscalls.cpp`, and
-the `WRAPPED_TRACE` linker flags are instrumentation and are to be removed
-once the library's drain is bounded.**
+and `--rapi-quiet-app` switches, the progress, service and write counters
+core 0 reads in `host/kernel.cpp`, the counting and `ServiceScope` marking in
+`host/circle_syscalls.cpp`, and the `WRAPPED_TRACE` linker flags are all
+instrumentation, and are to be removed once the start-up fault is found.**
 
 The game's own configuration for this build:
 

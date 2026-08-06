@@ -75,6 +75,10 @@ public:
     boolean Initialize(void);
     TShutdownMode Run(void);
 
+    // Instrumentation: one line of everything known about the application
+    // core, logged from core 0. See the README backlog.
+    void ReportAppCore(const char *pWhen);
+
 private:
     // No CScreenDevice: the SDL window owns the display.
     CActLED             m_ActLED;

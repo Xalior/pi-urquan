@@ -34,6 +34,16 @@
 #define BOOTTRACE_LOGINIT_RETURNED  9   // the game can log for itself now
 #define BOOTTRACE_MAIN_RETURNED     10  // the game returned
 
+// Inside the game's own start-up, in the order uqm.c calls them. These are
+// what milestone 9 was hiding: everything below used to be one silent step.
+#define BOOTTRACE_TFB_PREINIT       11  // TFB_PreInit
+#define BOOTTRACE_MEM_INIT          12  // mem_init
+#define BOOTTRACE_THREADSYS         13  // InitThreadSystem — the first SDL mutex
+#define BOOTTRACE_LOG_THREADS       14  // log_initThreads — another SDL mutex
+#define BOOTTRACE_INITIO            15  // initIO — the first look at the card
+#define BOOTTRACE_CONFIGDIR         16  // prepareConfigDir
+#define BOOTTRACE_RESOURCE_INDEX    17  // LoadResourceIndex — reads uqm.cfg
+
 extern "C" {
 
 // Called from the application core. A plain release store, no device, no
@@ -52,6 +62,16 @@ const char *BootTraceName(unsigned nMilestone);
 void BootTraceCountAppWrite(unsigned nBytes);
 unsigned BootTraceAppWrites(void);
 unsigned BootTraceAppWriteBytes(void);
+
+// The marshalled call the application core is inside, if any. A file
+// operation off core 0 rides the shim's I/O service and cannot finish until
+// core 0's servo runs, so an application core parked in one of these is
+// waiting for core 0 — which is a very different finding from one parked in
+// a mutex, and the two are indistinguishable without this.
+void BootTraceServiceBegin(const char *pName);
+void BootTraceServiceEnd(void);
+const char *BootTraceServiceName(void);   // "-" when not in one
+unsigned BootTraceServicesDone(void);
 
 }
 

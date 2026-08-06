@@ -506,7 +506,9 @@ WRAPPED_SYSCALLS = \
 # window between the game's entry point and its first log line, which
 # upstream leaves silent because it parses its command line before it knows
 # where to log to. Instrumentation — see the README backlog.
-WRAPPED_TRACE = uqm_main getopt_long getenv log_init
+WRAPPED_TRACE = uqm_main getopt_long getenv log_init \
+	TFB_PreInit mem_init InitThreadSystem log_initThreads initIO \
+	prepareConfigDir LoadResourceIndex
 
 # Nothing named SDL_ is wrapped or replaced here. The surface layer the game
 # draws through — software blits, colour keys, per-surface alpha, 8-bit

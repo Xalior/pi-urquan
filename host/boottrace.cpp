@@ -32,6 +32,8 @@ static const char From[] = "boottrace";
 static std::atomic<unsigned> s_Progress{0};
 static std::atomic<unsigned> s_AppWrites{0};
 static std::atomic<unsigned> s_AppWriteBytes{0};
+static std::atomic<const char *> s_Service{nullptr};
+static std::atomic<unsigned> s_ServicesDone{0};
 
 extern "C" {
 
@@ -61,6 +63,28 @@ unsigned BootTraceAppWriteBytes(void)
     return s_AppWriteBytes.load(std::memory_order_relaxed);
 }
 
+void BootTraceServiceBegin(const char *pName)
+{
+    s_Service.store(pName, std::memory_order_release);
+}
+
+void BootTraceServiceEnd(void)
+{
+    s_Service.store(nullptr, std::memory_order_release);
+    s_ServicesDone.fetch_add(1, std::memory_order_relaxed);
+}
+
+const char *BootTraceServiceName(void)
+{
+    const char *p = s_Service.load(std::memory_order_acquire);
+    return p != nullptr ? p : "-";
+}
+
+unsigned BootTraceServicesDone(void)
+{
+    return s_ServicesDone.load(std::memory_order_relaxed);
+}
+
 const char *BootTraceName(unsigned nMilestone)
 {
     switch (nMilestone)
@@ -76,6 +100,13 @@ const char *BootTraceName(unsigned nMilestone)
     case BOOTTRACE_LOGINIT_ENTERED:  return "in log_init";
     case BOOTTRACE_LOGINIT_RETURNED: return "past log_init — the game can log for itself";
     case BOOTTRACE_MAIN_RETURNED:    return "the game returned";
+    case BOOTTRACE_TFB_PREINIT:      return "in TFB_PreInit";
+    case BOOTTRACE_MEM_INIT:         return "in mem_init";
+    case BOOTTRACE_THREADSYS:        return "in InitThreadSystem — first SDL mutex";
+    case BOOTTRACE_LOG_THREADS:      return "in log_initThreads — another SDL mutex";
+    case BOOTTRACE_INITIO:           return "in initIO — first look at the card";
+    case BOOTTRACE_CONFIGDIR:        return "in prepareConfigDir";
+    case BOOTTRACE_RESOURCE_INDEX:   return "in LoadResourceIndex — reading uqm.cfg";
     default:                         return "unknown milestone";
     }
 }
@@ -88,6 +119,13 @@ int __real_getopt_long(int argc, char *const argv[], const char *shortopts,
                        const struct option *longopts, int *longind);
 char *__real_getenv(const char *name);
 void __real_log_init(int max_lines);
+void __real_TFB_PreInit(void);
+void __real_mem_init(void);
+void __real_InitThreadSystem(void);
+void __real_log_initThreads(void);
+void __real_initIO(void);
+void __real_prepareConfigDir(const char *config_dir);
+void __real_LoadResourceIndex(const char *dir, const char *name, const char *prefix);
 
 // The entry point. This is the line that separates "the application core
 // never got going" from "the game started and stopped somewhere inside".
@@ -171,6 +209,51 @@ void __wrap_log_init(int max_lines)
     BootTraceMark(BOOTTRACE_LOGINIT_RETURNED);
     SDL2Circle_Log(From, SDL2CIRCLE_LOG_NOTICE,
                    "log_init returned — the game can log for itself from here");
+}
+
+// The game's own start-up, one wrapper per step, in call order. Each marks
+// its milestone BEFORE doing the work, so the milestone names the step the
+// application core is inside rather than the last one it finished.
+void __wrap_TFB_PreInit(void)
+{
+    BootTraceMark(BOOTTRACE_TFB_PREINIT);
+    __real_TFB_PreInit();
+}
+
+void __wrap_mem_init(void)
+{
+    BootTraceMark(BOOTTRACE_MEM_INIT);
+    __real_mem_init();
+}
+
+void __wrap_InitThreadSystem(void)
+{
+    BootTraceMark(BOOTTRACE_THREADSYS);
+    __real_InitThreadSystem();
+}
+
+void __wrap_log_initThreads(void)
+{
+    BootTraceMark(BOOTTRACE_LOG_THREADS);
+    __real_log_initThreads();
+}
+
+void __wrap_initIO(void)
+{
+    BootTraceMark(BOOTTRACE_INITIO);
+    __real_initIO();
+}
+
+void __wrap_prepareConfigDir(const char *config_dir)
+{
+    BootTraceMark(BOOTTRACE_CONFIGDIR);
+    __real_prepareConfigDir(config_dir);
+}
+
+void __wrap_LoadResourceIndex(const char *dir, const char *name, const char *prefix)
+{
+    BootTraceMark(BOOTTRACE_RESOURCE_INDEX);
+    __real_LoadResourceIndex(dir, name, prefix);
 }
 
 }   // extern "C"
