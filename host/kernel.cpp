@@ -351,42 +351,78 @@ TShutdownMode CKernel::Run(void)
         s_AppGate.store(1, std::memory_order_release);
         PublishToOtherCores();
 
+        // A window that watches WITHOUT the scheduler, before yielding once.
+        //
+        // The previous instrument watched the progress word from inside the
+        // yield loop. Its first pass ran microseconds after the gate opened,
+        // so the application core had not moved yet and the milestone had not
+        // changed; the heartbeat had just been armed, so that did not fire
+        // either. It printed nothing and yielded — and the board went silent.
+        //
+        // That silence was itself the finding: this task never got another
+        // slice. So the watching happens here instead, on CTimer's busy wait,
+        // which contains no task switch. It depends on nothing but core 0's
+        // own logger and its timer, and it reports whether the application
+        // core is moving even if the scheduler never runs this task again.
+        if (rapi_trace_boot)
+        {
+            m_Logger.Write(From, LogNotice,
+                           "core 0 past the gate, watching without the scheduler");
+            for (unsigned i = 1; i <= 20; i++)
+            {
+                CTimer::SimpleMsDelay(500);
+                const unsigned nNow = BootTraceRead();
+                m_Logger.Write(From, LogNotice,
+                               "t+%u.%us app core at %u: %s",
+                               i / 2, (i % 2) * 5, nNow, BootTraceName(nNow));
+            }
+            m_Logger.Write(From, LogNotice,
+                           "core 0 yielding to the scheduler now — any line after "
+                           "this one means the yield returned");
+        }
+
         // Core 0's idle loop for the whole run. Yielding is not politeness
         // here: the servo task is what answers the application core, feeds
         // the sound device and pumps USB, and it only runs when this loop
         // gives it the core.
-        // Core 0's idle loop, watching the application core's progress word
-        // as it yields. The reporting is core 0's own logger, straight to
-        // the device it owns, so it works whether or not the log ring does —
-        // which is the whole point of the second channel.
         //
-        // A heartbeat as well as a change, because a milestone that stops
-        // advancing is the finding: it says where the application core is
-        // stuck, and it says core 0 is still alive to notice.
-        unsigned nSeen = 0;
+        // The yield comes FIRST and the reporting after it, so that a line
+        // from inside this loop is proof the yield returned. Reported with
+        // core 0's own logger, which writes straight to the device it owns
+        // and shares nothing with the application core's log ring.
+        unsigned nSeen = BootTraceRead();
+        bool bFirstSlice = true;
         unsigned nNextBeat = m_Timer.GetTicks() + 5 * HZ;
         while (!s_AppDone.load(std::memory_order_acquire))
         {
-            if (rapi_trace_boot)
-            {
-                const unsigned nNow = BootTraceRead();
-                if (nNow != nSeen)
-                {
-                    nSeen = nNow;
-                    nNextBeat = m_Timer.GetTicks() + 5 * HZ;
-                    m_Logger.Write(From, LogNotice,
-                                   "app core progress %u: %s",
-                                   nSeen, BootTraceName(nSeen));
-                }
-                else if (m_Timer.GetTicks() >= nNextBeat)
-                {
-                    nNextBeat = m_Timer.GetTicks() + 5 * HZ;
-                    m_Logger.Write(From, LogNotice,
-                                   "app core still at %u: %s",
-                                   nSeen, BootTraceName(nSeen));
-                }
-            }
             m_Scheduler.Yield();
+
+            if (!rapi_trace_boot)
+                continue;
+
+            if (bFirstSlice)
+            {
+                bFirstSlice = false;
+                m_Logger.Write(From, LogNotice,
+                               "the scheduler gave core 0 a slice back");
+            }
+
+            const unsigned nNow = BootTraceRead();
+            if (nNow != nSeen)
+            {
+                nSeen = nNow;
+                nNextBeat = m_Timer.GetTicks() + 5 * HZ;
+                m_Logger.Write(From, LogNotice,
+                               "app core progress %u: %s",
+                               nSeen, BootTraceName(nSeen));
+            }
+            else if (m_Timer.GetTicks() >= nNextBeat)
+            {
+                nNextBeat = m_Timer.GetTicks() + 5 * HZ;
+                m_Logger.Write(From, LogNotice,
+                               "app core still at %u: %s",
+                               nSeen, BootTraceName(nSeen));
+            }
         }
         res = s_AppResult;
     }
