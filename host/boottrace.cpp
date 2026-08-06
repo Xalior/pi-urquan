@@ -30,6 +30,8 @@ static const char From[] = "boottrace";
 // The progress word. Core 0 reads it with its own logger, so it reports even
 // when the log ring does not — see boottrace.h.
 static std::atomic<unsigned> s_Progress{0};
+static std::atomic<unsigned> s_AppWrites{0};
+static std::atomic<unsigned> s_AppWriteBytes{0};
 
 extern "C" {
 
@@ -41,6 +43,22 @@ void BootTraceMark(unsigned nMilestone)
 unsigned BootTraceRead(void)
 {
     return s_Progress.load(std::memory_order_acquire);
+}
+
+void BootTraceCountAppWrite(unsigned nBytes)
+{
+    s_AppWrites.fetch_add(1, std::memory_order_relaxed);
+    s_AppWriteBytes.fetch_add(nBytes, std::memory_order_relaxed);
+}
+
+unsigned BootTraceAppWrites(void)
+{
+    return s_AppWrites.load(std::memory_order_relaxed);
+}
+
+unsigned BootTraceAppWriteBytes(void)
+{
+    return s_AppWriteBytes.load(std::memory_order_relaxed);
 }
 
 const char *BootTraceName(unsigned nMilestone)

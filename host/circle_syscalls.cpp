@@ -49,6 +49,8 @@
 // file position would be.
 //
 #include <SDL2/SDL_circle.h>
+#include "defaults.h"
+#include "boottrace.h"
 
 #include <circle/multicore.h>
 
@@ -254,8 +256,20 @@ long __wrap__write(int fd, const void *buf, size_t len)
     {
         // The game's output, from the game's own core: format it into the
         // log ring and return. No mailbox, no waiting, no device touched.
-        SDL2Circle_LogBytes(fd == 2 ? "stderr" : "stdout",
-                            (const char *)buf, (unsigned)len);
+        //
+        // Counted first, always. The ring's producer never blocks — a full
+        // ring is a dropped line, not a wait — so this core can push lines
+        // far faster than core 0's servo can put them down a 115200-baud
+        // UART, and the count is what makes that rate visible.
+        //
+        // --rapi-quiet-app keeps them out of the ring entirely. That is a
+        // DIAGNOSTIC, not a fix: it exists to show that a quiet application
+        // core lets core 0's servo finish its drain and carry on. The fix
+        // belongs in the library's drain, not here.
+        BootTraceCountAppWrite((unsigned)len);
+        if (!rapi_quiet_app)
+            SDL2Circle_LogBytes(fd == 2 ? "stderr" : "stdout",
+                                (const char *)buf, (unsigned)len);
         return (long)len;
     }
 

@@ -373,8 +373,10 @@ TShutdownMode CKernel::Run(void)
                 CTimer::SimpleMsDelay(500);
                 const unsigned nNow = BootTraceRead();
                 m_Logger.Write(From, LogNotice,
-                               "t+%u.%us app core at %u: %s",
-                               i / 2, (i % 2) * 5, nNow, BootTraceName(nNow));
+                               "t+%u.%us app core at %u (%u writes, %u bytes): %s",
+                               i / 2, (i % 2) * 5, nNow,
+                               BootTraceAppWrites(), BootTraceAppWriteBytes(),
+                               BootTraceName(nNow));
             }
             m_Logger.Write(From, LogNotice,
                            "core 0 yielding to the scheduler now — any line after "

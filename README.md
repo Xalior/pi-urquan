@@ -51,20 +51,33 @@ alpha, 8-bit paletted sources — the renderer, its textures and its logical
 size, threads, mutexes, condition variables and semaphores, audio, keyboard,
 mouse and game controllers. There is no reimplementation of any of it here.
 
-It boots on a Raspberry Pi 5 and stops before drawing anything. Bring-up is
-healthy — the card mounts, all four cores start, the display is declared and
-the core split arms — and then the game produces no output at all.
+It boots on a Raspberry Pi 5 and stops before drawing anything, and the cause
+is not in this repository.
 
-The game parses its command line before it initialises logging, because the
-log file's name is one of the options, so that window is silent by upstream's
-own design and a stop inside it looks identical to a game that never started.
-`host/boottrace.cpp` exists to tell those apart. It is off unless the image's
-defaults block carries `--rapi-trace-boot`.
+The game itself runs. Instrumented, it reaches the point past its own logging
+setup within half a second of the application core being released. What stops
+is the HARDWARE core: it never returns from the scheduler, so nothing it owns
+is serviced again — USB is never enumerated, video never comes up, and the
+lines the game writes are never carried out of the ring they are queued in.
+
+The mechanism is a livelock between a producer that cannot block and a
+consumer that is not bounded. The library's log ring drops a line when it is
+full rather than waiting, so the application core produces at processor speed;
+the hardware core's drain loop runs until that ring is empty and puts every
+line down a 115200-baud serial port on the way. A game that logs faster than
+the port can carry never lets the drain finish, and the servo never reaches
+the yield at the bottom of its loop. Games that log little at start-up drain
+between bursts and never meet it.
+
+The fix belongs in the library's drain, which needs a bound on the work it
+does per pass. `host/boottrace.cpp` and the two `--rapi-` switches below exist
+to demonstrate that, and are not a fix.
 
 **Backlog: `host/boottrace.cpp`, `host/boottrace.h`, the `--rapi-trace-boot`
-switch, the progress word core 0 watches in `host/kernel.cpp`, and the
-`WRAPPED_TRACE` linker flags are instrumentation and are to be removed once
-the start-up fault is found.**
+and `--rapi-quiet-app` switches, the progress and write counters core 0 reads
+in `host/kernel.cpp`, the counting branch in `host/circle_syscalls.cpp`, and
+the `WRAPPED_TRACE` linker flags are instrumentation and are to be removed
+once the library's drain is bounded.**
 
 The game's own configuration for this build:
 

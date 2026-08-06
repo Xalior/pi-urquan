@@ -46,6 +46,13 @@ unsigned BootTraceRead(void);
 // A name for a milestone, for core 0 to put on the wire.
 const char *BootTraceName(unsigned nMilestone);
 
+// Counts the console writes the application core makes. Core 0 reports it
+// beside the milestone, which turns "the game is logging" into a rate that
+// can be compared against what a 115200-baud UART can carry.
+void BootTraceCountAppWrite(unsigned nBytes);
+unsigned BootTraceAppWrites(void);
+unsigned BootTraceAppWriteBytes(void);
+
 }
 
 #endif

@@ -75,6 +75,7 @@ TDefaultsBlock _uqm_defaults =
 
 int rapi_debug_uart = 0;
 int rapi_trace_boot = 0;
+int rapi_quiet_app = 0;
 
 }
 
@@ -94,6 +95,13 @@ static void DispatchKernelSwitch(const char *pSwitch)
         rapi_trace_boot = 1;
         SDL2Circle_Log(From, SDL2CIRCLE_LOG_NOTICE,
                        "--rapi-trace-boot consumed: start-up trace on");
+    }
+    else if (strcmp(pSwitch, "--rapi-quiet-app") == 0)
+    {
+        rapi_quiet_app = 1;
+        SDL2Circle_Log(From, SDL2CIRCLE_LOG_NOTICE,
+                       "--rapi-quiet-app consumed: the game's console output "
+                       "is counted and dropped, not put in the log ring");
     }
     else if (strncmp(pSwitch, "--rapi-perf=", 12) == 0)
     {
