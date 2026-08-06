@@ -22,10 +22,45 @@
 //
 #include <SDL2/SDL_circle.h>
 #include "defaults.h"
+#include "boottrace.h"
+#include <atomic>
 
 static const char From[] = "boottrace";
 
+// The progress word. Core 0 reads it with its own logger, so it reports even
+// when the log ring does not — see boottrace.h.
+static std::atomic<unsigned> s_Progress{0};
+
 extern "C" {
+
+void BootTraceMark(unsigned nMilestone)
+{
+    s_Progress.store(nMilestone, std::memory_order_release);
+}
+
+unsigned BootTraceRead(void)
+{
+    return s_Progress.load(std::memory_order_acquire);
+}
+
+const char *BootTraceName(unsigned nMilestone)
+{
+    switch (nMilestone)
+    {
+    case 0:                          return "nothing yet — the gate has not been passed";
+    case BOOTTRACE_GATE_PASSED:      return "past the gate";
+    case BOOTTRACE_LOG_ENTERED:      return "inside its first log call — the ring is the suspect";
+    case BOOTTRACE_LOG_RETURNED:     return "first log call returned — the ring works";
+    case BOOTTRACE_CALLING_GAME:     return "about to enter the game";
+    case BOOTTRACE_MAIN_ENTERED:     return "inside the game's entry point";
+    case BOOTTRACE_MAIN_REAL:        return "about to call upstream's own main";
+    case BOOTTRACE_GETOPT_FIRST:     return "in the option scan";
+    case BOOTTRACE_LOGINIT_ENTERED:  return "in log_init";
+    case BOOTTRACE_LOGINIT_RETURNED: return "past log_init — the game can log for itself";
+    case BOOTTRACE_MAIN_RETURNED:    return "the game returned";
+    default:                         return "unknown milestone";
+    }
+}
 
 // The game's entry point, renamed by the build, and the genuine versions of
 // the calls it makes before it can log anything of its own.
@@ -43,6 +78,8 @@ int __wrap_uqm_main(int argc, char **argv)
     if (!rapi_trace_boot)
         return __real_uqm_main(argc, argv);
 
+    BootTraceMark(BOOTTRACE_MAIN_ENTERED);
+
     SDL2Circle_Log(From, SDL2CIRCLE_LOG_NOTICE,
                    "uqm_main entered on the application core, argc=%d", argc);
     for (int i = 0; i < argc; i++)
@@ -54,7 +91,9 @@ int __wrap_uqm_main(int argc, char **argv)
                    argv[argc] == nullptr ? "NULL (terminated)"
                                          : "NOT NULL — argv is unterminated");
 
+    BootTraceMark(BOOTTRACE_MAIN_REAL);
     const int result = __real_uqm_main(argc, argv);
+    BootTraceMark(BOOTTRACE_MAIN_RETURNED);
 
     SDL2Circle_Log(From, SDL2CIRCLE_LOG_NOTICE,
                    "uqm_main returned %d", result);
@@ -72,6 +111,8 @@ int __wrap_getopt_long(int argc, char *const argv[], const char *shortopts,
 
     static int s_call = 0;
     const int call = ++s_call;
+    if (call == 1)
+        BootTraceMark(BOOTTRACE_GETOPT_FIRST);
 
     SDL2Circle_Log(From, SDL2CIRCLE_LOG_NOTICE,
                    "getopt_long call %d entered", call);
@@ -106,8 +147,10 @@ void __wrap_log_init(int max_lines)
         return;
     }
 
+    BootTraceMark(BOOTTRACE_LOGINIT_ENTERED);
     SDL2Circle_Log(From, SDL2CIRCLE_LOG_NOTICE, "log_init entered");
     __real_log_init(max_lines);
+    BootTraceMark(BOOTTRACE_LOGINIT_RETURNED);
     SDL2Circle_Log(From, SDL2CIRCLE_LOG_NOTICE,
                    "log_init returned — the game can log for itself from here");
 }

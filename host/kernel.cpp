@@ -37,6 +37,7 @@
 #include "kernel.h"
 #include "defaults.h"
 #include "defaultsblock.h"
+#include "boottrace.h"
 #include <circle/startup.h>
 #include <circle/machineinfo.h>
 #include <SDL2/SDL_circle.h>
@@ -133,15 +134,24 @@ void CSplitCores::Run(unsigned nCore)
         while (!s_AppGate.load(std::memory_order_acquire))
             asm volatile("wfe" ::: "memory");
 
-        // The first thing this core says for itself. It separates a gate
-        // that never opened from a game that started and stopped, and it
-        // proves the log ring carries a line from this core before the game
-        // has had a chance to use it. SDL2Circle_Log, not the kernel's
-        // logger: this is not core 0, and the serial console is a device.
+        // The first thing this core says for itself, on two channels that
+        // share nothing. The progress word is a plain store to memory that
+        // core 0 reads and reports with its own logger; the log call rides
+        // the ring. Marked either side of the log call on purpose: reaching
+        // BOOTTRACE_LOG_ENTERED and never BOOTTRACE_LOG_RETURNED says the
+        // ring is where this core stops, which a report carried BY the ring
+        // could never say. SDL2Circle_Log, not the kernel's logger: this is
+        // not core 0, and the serial console is a device.
+        BootTraceMark(BOOTTRACE_GATE_PASSED);
         if (rapi_trace_boot)
+        {
+            BootTraceMark(BOOTTRACE_LOG_ENTERED);
             SDL2Circle_Log(From, SDL2CIRCLE_LOG_NOTICE,
                            "application core past the gate, calling the game");
+            BootTraceMark(BOOTTRACE_LOG_RETURNED);
+        }
 
+        BootTraceMark(BOOTTRACE_CALLING_GAME);
         s_AppResult = uqm_main(s_FinalArgc, const_cast<char **>(s_FinalArgv));
 
         s_AppDone.store(1, std::memory_order_release);
@@ -345,8 +355,39 @@ TShutdownMode CKernel::Run(void)
         // here: the servo task is what answers the application core, feeds
         // the sound device and pumps USB, and it only runs when this loop
         // gives it the core.
+        // Core 0's idle loop, watching the application core's progress word
+        // as it yields. The reporting is core 0's own logger, straight to
+        // the device it owns, so it works whether or not the log ring does —
+        // which is the whole point of the second channel.
+        //
+        // A heartbeat as well as a change, because a milestone that stops
+        // advancing is the finding: it says where the application core is
+        // stuck, and it says core 0 is still alive to notice.
+        unsigned nSeen = 0;
+        unsigned nNextBeat = m_Timer.GetTicks() + 5 * HZ;
         while (!s_AppDone.load(std::memory_order_acquire))
+        {
+            if (rapi_trace_boot)
+            {
+                const unsigned nNow = BootTraceRead();
+                if (nNow != nSeen)
+                {
+                    nSeen = nNow;
+                    nNextBeat = m_Timer.GetTicks() + 5 * HZ;
+                    m_Logger.Write(From, LogNotice,
+                                   "app core progress %u: %s",
+                                   nSeen, BootTraceName(nSeen));
+                }
+                else if (m_Timer.GetTicks() >= nNextBeat)
+                {
+                    nNextBeat = m_Timer.GetTicks() + 5 * HZ;
+                    m_Logger.Write(From, LogNotice,
+                                   "app core still at %u: %s",
+                                   nSeen, BootTraceName(nSeen));
+                }
+            }
             m_Scheduler.Yield();
+        }
         res = s_AppResult;
     }
     else

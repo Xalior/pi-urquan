@@ -61,7 +61,8 @@ own design and a stop inside it looks identical to a game that never started.
 `host/boottrace.cpp` exists to tell those apart. It is off unless the image's
 defaults block carries `--rapi-trace-boot`.
 
-**Backlog: `host/boottrace.cpp`, the `--rapi-trace-boot` switch and the
+**Backlog: `host/boottrace.cpp`, `host/boottrace.h`, the `--rapi-trace-boot`
+switch, the progress word core 0 watches in `host/kernel.cpp`, and the
 `WRAPPED_TRACE` linker flags are instrumentation and are to be removed once
 the start-up fault is found.**
 
