@@ -2,8 +2,9 @@
 // circle_syscalls.cpp — the game's file access, routed to the core that
 // owns the hardware.
 //
-// THE PROBLEM. Chocolate Doom reads its WAD, its configuration and its save
-// games with plain C: fopen/fread, opendir/readdir, remove(). Those reach
+// THE PROBLEM. The Ur-Quan Masters reads its content packages, its
+// configuration and its save games with plain C: fopen/fread,
+// opendir/readdir, access(), remove(). Those reach
 // newlib, and newlib's Circle glue drives FatFs and the SD card directly.
 // On this kernel the game runs on the application core, and touching a
 // device from any core but core 0 is illegal — the whole Circle world,

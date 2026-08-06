@@ -69,10 +69,11 @@ TARGET = $(OBJDIR)/$(IMAGE)
 # Sources
 # ---------------------------------------------------------------------------
 
-# The kernel wrapper, the syscall layer and this port's own SDL layers: C++,
-# and this project's own code.
+# This port's own code: the kernel wrapper, the syscall layer, and the POSIX
+# calls newlib does not carry. No SDL — every SDL entry point the game uses
+# comes from circle-libsdl2.
 HOST_SRCS = main.cpp kernel.cpp defaults.cpp circle_syscalls.cpp \
-	circle_surface.cpp circle_threads.cpp circle_stubs.cpp
+	circle_stubs.cpp
 HOST_OBJS = $(addprefix $(OBJDIR)/,$(HOST_SRCS:.cpp=.o))
 
 # The Ur-Quan Masters' own source list.
@@ -500,35 +501,16 @@ WRAPPED_SYSCALLS = \
 	_fcntl mkdir chdir getcwd dup dup2 \
 	opendir readdir closedir rewinddir
 
-# ---------------------------------------------------------------------------
-# Four SDL functions the shim owns and this port replaces
-# ---------------------------------------------------------------------------
+# Nothing named SDL_ is wrapped or replaced here. The surface layer the game
+# draws through — software blits, colour keys, per-surface alpha, 8-bit
+# paletted sources — and the texture formats it asks the renderer for are
+# both SDL2's own job, so both live in circle-libsdl2 where every game
+# reaches them.
 #
-# The surfaces (circle_surface.cpp). circle-libsdl2's SDL_Surface is a
-# staging buffer in one fixed 32-bit layout, with nothing that blits,
-# converts or clips — its renderer takes pixels from textures alone. The Ur-
-# Quan Masters draws everything through surfaces: it composes three screens
-# in software, with colour keys, per-surface alpha and 8-bit paletted
-# sources, and only the finished frame ever reaches a texture. So a real
-# software surface layer has to exist, and it exists here.
-#
-# The textures (circle_stubs.cpp). The library creates ARGB8888 textures and
-# nothing else; the game asks for RGBX8888, which is the same four bytes in
-# a different order. The wrapper accepts the game's format, keeps the
-# library's, and converts on the way in.
-#
-# --wrap for the same reason as the syscalls above: it leaves the library's
-# implementations in place and reachable as __real_*, so this port's
-# versions can hand back anything they do not handle. A plain redefinition
-# would collide with the archive, which is linked whole precisely so that it
-# does.
-WRAPPED_SDL = SDL_CreateRGBSurface SDL_FreeSurface \
-	SDL_CreateTexture SDL_UpdateTexture
-
 # The link is driven by the cross ld directly (Circle's Rules.mk sets
 # LD = <prefix>ld for GCC builds), so these are plain linker options, not
 # compiler-driver -Wl, ones.
-LDFLAGS += $(addprefix --wrap=,$(WRAPPED_SYSCALLS) $(WRAPPED_SDL))
+LDFLAGS += $(addprefix --wrap=,$(WRAPPED_SYSCALLS))
 
 # ---------------------------------------------------------------------------
 # Compilation
