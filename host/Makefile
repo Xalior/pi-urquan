@@ -50,7 +50,13 @@ WORLD = $(CIRCLE_WORLDS)/circle-stdlib-$(RAPI_BOARD)
 include $(WORLD)/Config.mk
 
 ROOT     = ..
-SHIM     = $(ROOT)/circle-libsdl2
+# WHERE THE SHIM COMES FROM.
+#
+# Unset, this repository's own pinned copy — what a clone of this repository
+# gets, and what CI builds. A parent proving one shim across several games
+# points SHIM at the single checkout it is proving, so the library is built
+# once rather than once per game.
+SHIM     ?= $(ROOT)/circle-libsdl2
 # The game's own tree sits one level down inside its repository: the
 # upstream project keeps the game in sc2/ and its packaging tools beside it.
 UQM      = $(ROOT)/uqm/sc2
