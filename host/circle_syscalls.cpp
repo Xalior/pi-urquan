@@ -50,7 +50,6 @@
 //
 #include <SDL2/SDL_circle.h>
 #include "defaults.h"
-#include "boottrace.h"
 
 #include <circle/multicore.h>
 
@@ -135,31 +134,6 @@ R OnHardwareCoreDo(F fn)
 // Descriptors 0, 1 and 2 are the serial console, not files.
 inline bool IsConsole(int fd) { return fd >= 0 && fd <= 2; }
 
-// Names the marshalled call this core is inside, for the whole of its scope.
-// Instrumentation — see the README backlog. A file operation off core 0
-// cannot finish until core 0's servo runs, so an application core parked in
-// one of these is waiting for core 0, and that is worth being able to see.
-// Only the marshalled path is marked. Core 0 runs these same wrappers when
-// it performs the service on the application core's behalf, and marking
-// there would overwrite the very thing this is meant to report.
-struct ServiceScope
-{
-    const bool m_bMarked;
-
-    explicit ServiceScope(const char *pName)
-    :   m_bMarked(!OnHardwareCore())
-    {
-        if (m_bMarked)
-            BootTraceServiceBegin(pName);
-    }
-
-    ~ServiceScope(void)
-    {
-        if (m_bMarked)
-            BootTraceServiceEnd();
-    }
-};
-
 // ---------------------------------------------------------------------------
 // Open-file positions.
 //
@@ -203,7 +177,6 @@ extern "C" {
 
 int __wrap__open(const char *path, int flags, ...)
 {
-    ServiceScope trace_("_open");
     // The mode argument only matters when creating, and the service always
     // creates with the same permissions, so it is not forwarded.
     if (OnHardwareCore())
@@ -242,7 +215,6 @@ int __wrap__open(const char *path, int flags, ...)
 
 int __wrap__close(int fd)
 {
-    ServiceScope trace_("_close");
     if (OnHardwareCore())
         return __real__close(fd);
     if (IsConsole(fd))
@@ -257,7 +229,6 @@ int __wrap__close(int fd)
 
 long __wrap__read(int fd, void *buf, size_t len)
 {
-    ServiceScope trace_("_read");
     if (OnHardwareCore())
         return __real__read(fd, buf, len);
     if (IsConsole(fd))
@@ -284,17 +255,13 @@ long __wrap__write(int fd, const void *buf, size_t len)
     {
         // The game's output, from the game's own core: format it into the
         // log ring and return. No mailbox, no waiting, no device touched.
-        //
-        // Counted first, always. The ring's producer never blocks — a full
-        // ring is a dropped line, not a wait — so this core can push lines
-        // far faster than core 0's servo can put them down a 115200-baud
-        // UART, and the count is what makes that rate visible.
+        // The ring's producer never blocks — a full ring is a dropped line,
+        // not a wait.
         //
         // --rapi-quiet-app keeps them out of the ring entirely. That is a
         // DIAGNOSTIC, not a fix: it exists to show that a quiet application
         // core lets core 0's servo finish its drain and carry on. The fix
         // belongs in the library's drain, not here.
-        BootTraceCountAppWrite((unsigned)len);
         if (!rapi_quiet_app)
             SDL2Circle_LogBytes(fd == 2 ? "stderr" : "stdout",
                                 (const char *)buf, (unsigned)len);
@@ -318,7 +285,6 @@ long __wrap__write(int fd, const void *buf, size_t len)
 
 off_t __wrap__lseek(int fd, off_t off, int whence)
 {
-    ServiceScope trace_("_lseek");
     if (OnHardwareCore())
         return __real__lseek(fd, off, whence);
     if (IsConsole(fd))
@@ -393,7 +359,6 @@ static int stat_through_service(const char *path, struct stat *st)
 
 int __wrap__stat(const char *path, struct stat *st)
 {
-    ServiceScope trace_("_stat");
     if (OnHardwareCore())
         return __real__stat(path, st);
     return stat_through_service(path, st);
@@ -417,7 +382,6 @@ int __wrap__unlink(const char *path)
 
 int __wrap_mkdir(const char *path, mode_t mode)
 {
-    ServiceScope trace_("mkdir");
     if (OnHardwareCore())
         return __real_mkdir(path, mode);
     int r = SDL2Circle_IOMkdir(path);
@@ -431,7 +395,6 @@ int __wrap_mkdir(const char *path, mode_t mode)
 
 DIR *__wrap_opendir(const char *path)
 {
-    ServiceScope trace_("opendir");
     if (OnHardwareCore())
         return __real_opendir(path);
     return (DIR *)SDL2Circle_IOOpenDir(path);
@@ -439,7 +402,6 @@ DIR *__wrap_opendir(const char *path)
 
 struct dirent *__wrap_readdir(DIR *dir)
 {
-    ServiceScope trace_("readdir");
     if (OnHardwareCore())
         return __real_readdir(dir);
 
@@ -464,7 +426,6 @@ struct dirent *__wrap_readdir(DIR *dir)
 
 int __wrap_closedir(DIR *dir)
 {
-    ServiceScope trace_("closedir");
     if (OnHardwareCore())
         return __real_closedir(dir);
     SDL2Circle_IOCloseDir((intptr_t)dir);
@@ -532,7 +493,6 @@ int __wrap__fcntl(int fd, int cmd, int arg)
 
 int __wrap_chdir(const char *path)
 {
-    ServiceScope trace_("chdir");
     if (OnHardwareCore())
         return __real_chdir(path);
     return OnHardwareCoreDo([&] { return __real_chdir(path); });

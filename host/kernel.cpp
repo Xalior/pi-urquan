@@ -37,7 +37,6 @@
 #include "kernel.h"
 #include "defaults.h"
 #include "defaultsblock.h"
-#include "boottrace.h"
 #include <circle/startup.h>
 #include <circle/machineinfo.h>
 #include <SDL2/SDL_circle.h>
@@ -127,24 +126,6 @@ void CSplitCores::Run(unsigned nCore)
         while (!s_AppGate.load(std::memory_order_acquire))
             asm volatile("wfe" ::: "memory");
 
-        // The first thing this core says for itself, on two channels that
-        // share nothing. The progress word is a plain store to memory that
-        // core 0 reads and reports with its own logger; the log call rides
-        // the ring. Marked either side of the log call on purpose: reaching
-        // BOOTTRACE_LOG_ENTERED and never BOOTTRACE_LOG_RETURNED says the
-        // ring is where this core stops, which a report carried BY the ring
-        // could never say. SDL2Circle_Log, not the kernel's logger: this is
-        // not core 0, and the serial console is a device.
-        BootTraceMark(BOOTTRACE_GATE_PASSED);
-        if (rapi_trace_boot)
-        {
-            BootTraceMark(BOOTTRACE_LOG_ENTERED);
-            SDL2Circle_Log(From, SDL2CIRCLE_LOG_NOTICE,
-                           "application core past the gate, calling the game");
-            BootTraceMark(BOOTTRACE_LOG_RETURNED);
-        }
-
-        BootTraceMark(BOOTTRACE_CALLING_GAME);
         s_AppResult = uqm_main(s_FinalArgc, const_cast<char **>(s_FinalArgv));
 
         s_AppDone.store(1, std::memory_order_release);
@@ -171,7 +152,8 @@ CKernel::CKernel(void)
       m_Timer(&m_Interrupt),
       m_Logger(m_Options.GetLogLevel(), &m_Timer),
       m_EMMC(&m_Interrupt, &m_Timer, &m_ActLED),
-      m_Console(&m_Serial, &m_Serial)     // stdio over the UART
+      m_Console(&m_Serial, &m_Serial),    // stdio over the UART
+      m_USB(&m_Interrupt, &m_Timer, TRUE /* plug-and-play */)
 {
     m_ActLED.Blink(3);
 }
@@ -220,6 +202,21 @@ boolean CKernel::Initialize(void)
     if (bOK) bOK = m_Console.Initialize();
     if (bOK) CGlueStdioInit(m_Console);
 
+    // USB, here and not in the game's SDL_Init.
+    //
+    // Enumeration is slow, interrupt-driven and free to take as long as it
+    // needs — right here, on core 0, with the whole machine to itself and
+    // nothing yet depending on it answering. That is exactly what it is NOT
+    // once the split is armed: from then on core 0's servo is the only thing
+    // answering the other cores, and a long call inside it stops everything.
+    //
+    // Not fatal. A board with no working USB still runs the game, just with
+    // no keyboard and no pad, and that is worth saying rather than dying for.
+    if (bOK && !m_USB.Initialize())
+        m_Logger.Write(From, LogWarning,
+                       "USB did not come up — the game will run without a "
+                       "keyboard or a game pad");
+
     // Core 0 runs application and library code like any other core, so it
     // arms itself too — before the secondary cores start, and before the
     // first thing that can throw.
@@ -232,20 +229,6 @@ boolean CKernel::Initialize(void)
     // gate.
     if (bOK) bOK = m_Cores.Initialize();
     return bOK;
-}
-
-// Everything known about the application core, in one line: where it is in
-// the game's start-up, which marshalled call it is parked in if any, how many
-// of those have completed, and how much it has written. Core 0's own logger,
-// which shares nothing with the ring the application core writes into.
-void CKernel::ReportAppCore(const char *pWhen)
-{
-    const unsigned nNow = BootTraceRead();
-    m_Logger.Write(From, LogNotice,
-                   "[%s] app core at %u (%s) | service: %s, %u done | %u writes, %u bytes",
-                   pWhen, nNow, BootTraceName(nNow),
-                   BootTraceServiceName(), BootTraceServicesDone(),
-                   BootTraceAppWrites(), BootTraceAppWriteBytes());
 }
 
 TShutdownMode CKernel::Run(void)
@@ -349,97 +332,12 @@ TShutdownMode CKernel::Run(void)
     s_AppGate.store(1, std::memory_order_release);
     PublishToOtherCores();
 
-    // TWO WINDOWS, and the difference between them is the point.
-    //
-    // The first watches without the scheduler, which proves core 0 is
-    // alive and returning from SDL2Circle_SplitInit. It is deliberately
-    // SHORT. While it runs, the servo does not, so any file operation
-    // the application core makes is unanswerable and that core parks in
-    // it — an artifact of watching, not a fault, and a long window makes
-    // it look like a frozen game. Two seconds is enough to prove the
-    // point and short enough not to tell that lie.
-    //
-    // The second yields first and reports after, so every line from it
-    // is proof the yield returned, and the LAST line before any silence
-    // names where both cores were when it stopped.
-    if (rapi_trace_boot)
-    {
-        m_Logger.Write(From, LogNotice,
-                       "core 0 past the gate, watching without the scheduler "
-                       "(the app core cannot be served during this window)");
-        for (unsigned i = 1; i <= 4; i++)
-        {
-            CTimer::SimpleMsDelay(500);
-            ReportAppCore("no-sched");
-        }
-        m_Logger.Write(From, LogNotice,
-                       "core 0 yielding to the scheduler now — any line after "
-                       "this one means the yield returned");
-    }
-
     // Core 0's idle loop for the whole run. Yielding is not politeness
     // here: the servo task is what answers the application core, feeds
     // the sound device and pumps USB, and it only runs when this loop
     // gives it the core.
-    //
-    // THE FIRST YIELDS ARE BRACKETED, and that bracket is the whole
-    // instrument. The servo runs each marshalled call inline in its own
-    // loop, so a handler that never returns takes the servo with it, and
-    // a servo that never returns never yields — this task is then never
-    // scheduled again. Printing BEFORE the yield and again after it means
-    // an unmatched "about to yield" is the fatal one, and the line that
-    // carries it already names what the application core had in flight.
-    //
-    // That is the same discrimination as the library's calls
-    // started-versus-served, reached without reading either counter: an
-    // unmatched bracket IS started == served + 1. It matters that it gets
-    // there differently, because the library's own stall report travels
-    // by the log ring, and the ring is drained by the core that has
-    // stopped. This line is core 0's own logger writing straight to the
-    // device core 0 owns, so it is on the wire before the yield that
-    // never returns.
-    //
-    // Bounded, because a yield happens thousands of times a second and
-    // the serial port carries a few dozen lines. After the loud ones it
-    // falls back to reporting on change and on a beat.
-    unsigned nYield = 0;
-    unsigned nSeen = BootTraceRead();
-    unsigned nNextBeat = m_Timer.GetTicks() + 2 * HZ;
     while (!s_AppDone.load(std::memory_order_acquire))
-    {
-        const bool bLoud = rapi_trace_boot && ++nYield <= 40;
-
-        if (bLoud)
-        {
-            m_Logger.Write(From, LogNotice,
-                           "yield %u: about to yield | app core at %u (%s) | "
-                           "service: %s, %u done",
-                           nYield, BootTraceRead(),
-                           BootTraceName(BootTraceRead()),
-                           BootTraceServiceName(), BootTraceServicesDone());
-        }
-
         m_Scheduler.Yield();
-
-        if (bLoud)
-            m_Logger.Write(From, LogNotice, "yield %u: returned", nYield);
-
-        if (!rapi_trace_boot)
-            continue;
-
-        const unsigned nNow = BootTraceRead();
-        if (nNow != nSeen)
-        {
-            nSeen = nNow;
-            nNextBeat = m_Timer.GetTicks() + 2 * HZ;
-            ReportAppCore("moved");
-        }
-        else if (m_Timer.GetTicks() >= nNextBeat)
-        {
-            nNextBeat = m_Timer.GetTicks() + 2 * HZ;
-            ReportAppCore("beat");
-        }
-    }
     res = s_AppResult;
 
     // Park instead of rebooting. A reboot stops the clocks with the UART

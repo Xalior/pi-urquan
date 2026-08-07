@@ -73,7 +73,7 @@ TARGET = $(OBJDIR)/$(IMAGE)
 # calls newlib does not carry. No SDL — every SDL entry point the game uses
 # comes from circle-libsdl2.
 HOST_SRCS = main.cpp kernel.cpp defaults.cpp circle_syscalls.cpp \
-	circle_stubs.cpp boottrace.cpp
+	circle_stubs.cpp
 HOST_OBJS = $(addprefix $(OBJDIR)/,$(HOST_SRCS:.cpp=.o))
 
 # The Ur-Quan Masters' own source list.
@@ -501,15 +501,6 @@ WRAPPED_SYSCALLS = \
 	_fcntl mkdir chdir getcwd dup dup2 \
 	opendir readdir readdir_r closedir rewinddir
 
-# The start-up trace in boottrace.cpp, which is silent unless the defaults
-# block carries --rapi-trace-boot. These are not syscalls: they bracket the
-# window between the game's entry point and its first log line, which
-# upstream leaves silent because it parses its command line before it knows
-# where to log to. Instrumentation — see the README backlog.
-WRAPPED_TRACE = uqm_main getopt_long getenv log_init \
-	TFB_PreInit mem_init InitThreadSystem log_initThreads initIO \
-	prepareConfigDir LoadResourceIndex
-
 # Nothing named SDL_ is wrapped or replaced here. The surface layer the game
 # draws through — software blits, colour keys, per-surface alpha, 8-bit
 # paletted sources — and the texture formats it asks the renderer for are
@@ -519,7 +510,7 @@ WRAPPED_TRACE = uqm_main getopt_long getenv log_init \
 # The link is driven by the cross ld directly (Circle's Rules.mk sets
 # LD = <prefix>ld for GCC builds), so these are plain linker options, not
 # compiler-driver -Wl, ones.
-LDFLAGS += $(addprefix --wrap=,$(WRAPPED_SYSCALLS) $(WRAPPED_TRACE))
+LDFLAGS += $(addprefix --wrap=,$(WRAPPED_SYSCALLS))
 
 # ---------------------------------------------------------------------------
 # Compilation
