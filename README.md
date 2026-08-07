@@ -13,6 +13,11 @@ tree.
 probe. The board is running this image and nothing else: no kernel underneath
 it, no window system, no launcher.*
 
+![Talking to a Slylandro probe](docs/urquan-conversation.jpg)
+
+*The other half of the game: an alien on the comm screen and a list of things
+to say to it.*
+
 ## What this is
 
 [The Ur-Quan Masters](https://sc2.sourceforge.net) is the free software
