@@ -214,7 +214,6 @@ game wants, because a slowed processor drops frames.
 
 | Option | Effect |
 |---|---|
-| `rapi-split=0` | Run everything on core 0 instead of splitting the work across three. Slower, and useful for comparing the two against one image. |
 | `rapi-perf=N` | Print a performance line to the serial console every N seconds. |
 | `rapi-debug-uart` | Accept key presses from the serial console, so a board with no keyboard attached can still be driven. |
 
