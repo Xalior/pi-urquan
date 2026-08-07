@@ -61,14 +61,7 @@ watched directly. It then yields to the scheduler and is never heard from
 again — nothing it owns is serviced after that, so USB is never enumerated
 and video never comes up.
 
-`host/boottrace.cpp` and the `--rapi-` switches below exist to narrow that
-down, and none of them is a fix.
-
-**Backlog: `host/boottrace.cpp`, `host/boottrace.h`, the `--rapi-trace-boot`
-and `--rapi-quiet-app` switches, the progress, service and write counters
-core 0 reads in `host/kernel.cpp`, the counting and `ServiceScope` marking in
-`host/circle_syscalls.cpp`, and the `WRAPPED_TRACE` linker flags are all
-instrumentation, and are to be removed once the start-up fault is found.**
+`host/boottrace.cpp` exists to narrow that down, and it is not a fix.
 
 The game's own configuration for this build:
 
@@ -208,38 +201,10 @@ pin changes what happens at that temperature: the fan is switched on and the
 processor is left at full speed, instead of being slowed down. That is what a
 game wants, because a slowed processor drops frames.
 
-### Boot options
-
-`cmdline.txt` also accepts switches this kernel reads:
-
-| Option | Effect |
-|---|---|
-| `rapi-perf=N` | Print a performance line to the serial console every N seconds. |
-| `rapi-debug-uart` | Accept key presses from the serial console, so a board with no keyboard attached can still be driven. |
-
 The same switches, and the game's own, can also be stamped into a built image
 without rebuilding it: each image carries a patchable defaults block at offset
 `0x800`, and anything written there is appended to the game's command line at
 boot. The build refuses to produce an image whose block is not present.
-
-## How the layers fit
-
-`host/` holds everything this repository adds, and nothing else:
-
-| File | What it is |
-|---|---|
-| `kernel.cpp`, `kernel.h`, `main.cpp` | The Circle kernel: brings up the serial console, the SD card and the filesystem, elects the three cores, and calls the game. |
-| `circle_syscalls.cpp` | Puts the SD card underneath the C library in a way that is legal from a core that does not own the hardware. |
-| `circle_stubs.cpp` | Three C-library functions newlib's Circle port does not carry: `access`, `getuid` and `getpwuid`. |
-| `defaults.cpp`, `defaults.h`, `defaultsblock.h`, `uqm-defaults.ld` | The patchable defaults block at image offset `0x800`, and this kernel's use of it. |
-| `uqmconf/config_unix.h` | The build configuration the game's own build system would otherwise generate by probing a desktop machine. |
-| `pngconf/pnglibconf.h`, `oggconf/ogg/config_types.h` | The same, for the two libraries that also expect a configure step. |
-| `config.txt`, `cmdline.txt` | Firmware boot configuration, one file for all three boards. |
-
-The game's entry point is renamed by the preprocessor for one file, so that
-`main` belongs to the Circle kernel and the game is a function it calls. That,
-and the linker's `--wrap` on the filesystem calls, is the whole of the
-intrusion into upstream: no patch, no fork, no edit.
 
 ## License
 
