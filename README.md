@@ -7,6 +7,12 @@ desktop, no launcher, and nothing else running beside it.
 It builds for the Raspberry Pi 3, Pi 4 and Pi 5, all three from one source
 tree.
 
+![The Ur-Quan Masters running on a Raspberry Pi 5 with no operating system](docs/urquan-on-bare-metal.jpg)
+
+*Captured from the Pi 5's HDMI output — the Vindicator against a Slylandro
+probe. The board is running this image and nothing else: no kernel underneath
+it, no window system, no launcher.*
+
 ## What this is
 
 [The Ur-Quan Masters](https://sc2.sourceforge.net) is the free software
