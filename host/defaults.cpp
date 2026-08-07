@@ -103,38 +103,6 @@ static void DispatchKernelSwitch(const char *pSwitch)
                        "--rapi-quiet-app consumed: the game's console output "
                        "is counted and dropped, not put in the log ring");
     }
-    else if (strncmp(pSwitch, "--rapi-trace-servo=", 19) == 0)
-    {
-        // Laps of the hardware core's servo to describe on the console. The
-        // library does the describing; this only says how many. Digits or
-        // nothing, on the same terms as --rapi-perf below.
-        const char *pValue = pSwitch + 19;
-        unsigned nLaps = 0;
-        bool bDigits = *pValue != '\0';
-        for (const char *p = pValue; *p != '\0'; p++)
-        {
-            if (*p < '0' || *p > '9')
-            {
-                bDigits = false;
-                break;
-            }
-            nLaps = nLaps * 10 + (unsigned)(*p - '0');
-        }
-
-        if (bDigits)
-        {
-            SDL2Circle_SplitTraceServo(nLaps);
-            SDL2Circle_Log(From, SDL2CIRCLE_LOG_NOTICE,
-                           "--rapi-trace-servo consumed: the hardware core "
-                           "describes its first %u servo lap(s), and every "
-                           "marshalled call after them", nLaps);
-        }
-        else
-        {
-            SDL2Circle_Log(From, SDL2CIRCLE_LOG_WARNING,
-                           "unrecognised kernel switch \"%s\" ignored", pSwitch);
-        }
-    }
     else if (strncmp(pSwitch, "--rapi-perf=", 12) == 0)
     {
         // Seconds between performance reports. Nothing but digits is an

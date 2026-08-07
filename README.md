@@ -61,14 +61,6 @@ watched directly. It then yields to the scheduler and is never heard from
 again — nothing it owns is serviced after that, so USB is never enumerated
 and video never comes up.
 
-The hardware core is where everything on this board is serviced, so when it
-stops there is nothing left running to say so, and the two shapes that could
-produce this silence look identical from the bench: a step on that core's
-servo loop that never returns, or that core's own state being destroyed by
-something else. `--rapi-trace-servo` below tells them apart in one boot —
-the core names each step before taking it, so the last line on the wire is
-the step that never came back.
-
 `host/boottrace.cpp` and the `--rapi-` switches below exist to narrow that
 down, and none of them is a fix.
 
@@ -224,17 +216,6 @@ game wants, because a slowed processor drops frames.
 |---|---|
 | `rapi-perf=N` | Print a performance line to the serial console every N seconds. |
 | `rapi-debug-uart` | Accept key presses from the serial console, so a board with no keyboard attached can still be driven. |
-| `rapi-trace-servo=N` | Have the hardware core say what it is about to do, for its first N servo laps and for every marshalled call after them. For a board that goes silent on every core at once — see below. |
-
-`rapi-trace-servo` is the one instrument that can describe a hardware core
-that has stopped. Everything else on the console is written by that core, so
-when it stops there is nothing left to report it and the board looks exactly
-like one that never started. With the switch stamped in, the core names each
-step *before* taking it, so the last line on the wire is the step that never
-returned, and a marshalled call is named by its handler's address — which
-`host/build/rpi5/kernel_2712.map` turns back into a function. It makes the
-hardware core far slower than it really is, so it is for finding a stopped
-board, not for watching a running one.
 
 The same switches, and the game's own, can also be stamped into a built image
 without rebuilding it: each image carries a patchable defaults block at offset
