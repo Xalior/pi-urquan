@@ -46,21 +46,8 @@ IMAGE_rpi5 = kernel_2712.img
 .PHONY: deps kernels verify media netboot card clean-boards $(BOARDS)
 .PHONY: $(addprefix deps-,$(BOARDS))
 
-# The stack each core gets. circle-libsdl2 leaves this to the consumer,
-# because how much stack a program needs is the program's to know, and its
-# own default is Circle's 128 KB a core.
-#
-# The worlds this port was built and tested against were configured with 2 MB.
-# That has NOT been shown to be needed here — this game draws at 320x240 and
-# has no per-frame stack allocation of the kind that forced the question
-# elsewhere — and it is stated only so that a fresh checkout builds the world
-# the tested images were built against. A world keeps whatever size it was
-# configured with, so a value changed here reaches nothing until that world is
-# reconfigured and rebuilt.
-CIRCLE_KERNEL_STACK_SIZE = 0x200000
-
 deps:
-	$(MAKE) -C circle-libsdl2 deps CIRCLE_KERNEL_STACK_SIZE=$(CIRCLE_KERNEL_STACK_SIZE)
+	$(MAKE) -C circle-libsdl2 deps
 
 # One board's dependencies: its own circle-stdlib world and the shim archive
 # built against it. A machine with a small disk — a CI runner, most obviously
@@ -70,8 +57,7 @@ deps:
 # to phony targets — it would quietly answer "nothing to be done" and leave
 # the world unbuilt.
 $(addprefix deps-,$(BOARDS)): deps-%:
-	$(MAKE) -C circle-libsdl2 world BOARD=$* \
-		CIRCLE_KERNEL_STACK_SIZE=$(CIRCLE_KERNEL_STACK_SIZE)
+	$(MAKE) -C circle-libsdl2 world BOARD=$*
 	$(MAKE) -C circle-libsdl2 libSDL2-$*.a BOARD=$*
 
 $(BOARDS): check-toolchain

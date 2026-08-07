@@ -433,8 +433,30 @@ INCLUDE := -I $(UQM)/src/regex \
 # the configuration chosen in the source list above. Each of these selects
 # which code exists rather than tuning it.
 UQM_DEFINE = -DGFXMODULE_SDL -DSDL_DIR=SDL2 -DUSE_INTERNAL_MIKMOD \
-	-DHAVE_JOYSTICK -DHAVE_ZIP=1 -DTHREADLIB_SDL -DNDEBUG
+	-DHAVE_JOYSTICK -DHAVE_ZIP=1 -DTHREADLIB_SDL -DNDEBUG \
+	-DTaskSwitch=UQM_TaskSwitch
 
+# THE RENAME ABOVE IS LOAD-BEARING, AND THE BOARD DOES NOT SURVIVE WITHOUT IT.
+#
+# The game's thread library exports a plain C function named TaskSwitch —
+# "give up the rest of my timeslice", which under THREADLIB_SDL is SDL_Delay(1).
+# Circle's cooperative context switch is also a plain C symbol named
+# TaskSwitch: the routine that saves one task's registers and loads the next
+# one's, and the only thing in the system that can move between tasks.
+#
+# The game's objects are named on the link line; Circle's is an archive
+# member. A definition already present is a definition the linker stops
+# looking for, so it never opens libsched's taskswitch.o, and it says nothing
+# — this is not a duplicate symbol, it is a symbol that was resolved early.
+# Circle's switch is then simply absent from the image, and every call to
+# CScheduler::Yield tail-calls a one-millisecond sleep with the two register
+# blocks discarded in the argument registers. No task ever starts, core 0
+# never answers anything again, and the board goes quiet with no fault to
+# report.
+#
+# Defining it away here renames the definition and every call site together,
+# in the game's translation units only, so upstream is untouched and Circle
+# keeps the name its own vendored world refers to.
 # The C sources are C99 with GNU extensions, which is what upstream's build
 # asks for. It is stated here rather than added to CFLAGS because Rules.mk
 # folds CFLAGS into the C++ flags as well, and a C standard handed to the
