@@ -40,4 +40,15 @@ extern "C" int rapi_debug_uart;
 // backlog.
 extern "C" int rapi_quiet_app;
 
+// Set by --rapi-cache=<size> in the block: the disk cache's pool, in
+// kilobytes, with 0 meaning no cache at all. It starts at the cache's own
+// provisional default, so a boot that says nothing still gets one. The value
+// is read by the kernel after the block has been consumed and handed to
+// CDiskCacheDevice::Configure.
+//
+// The point of putting it in the block is that the right size differs from
+// one game to the next and is settled by measurement: the same image can be
+// run at several sizes, one boot each, with nothing rebuilt in between.
+extern "C" unsigned rapi_cache_kb;
+
 #endif
