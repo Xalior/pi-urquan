@@ -40,8 +40,8 @@ extern "C" int rapi_debug_uart;
 // backlog.
 extern "C" int rapi_quiet_app;
 
-// Set by --rapi-cache=<size> in the block: the disk cache's pool, in
-// kilobytes, with 0 meaning no cache at all. It starts at the cache's own
+// Set by --rapi-cache-size=<size> in the block: the disk cache's pool, in
+// kilobytes, with 0 meaning no pool at all. It starts at the cache's own
 // provisional default, so a boot that says nothing still gets one. The value
 // is read by the kernel after the block has been consumed and handed to
 // CDiskCacheDevice::Configure.
@@ -50,5 +50,17 @@ extern "C" int rapi_quiet_app;
 // one game to the next and is settled by measurement: the same image can be
 // run at several sizes, one boot each, with nothing rebuilt in between.
 extern "C" unsigned rapi_cache_kb;
+
+// Set by --rapi-cache-readahead=<size>: how much the cache fetches ahead when
+// a read carries on from the previous one, in kilobytes, with 0 meaning it
+// fetches only what was asked for.
+//
+// Separate from the pool because it answers a different problem and is worth
+// measuring on its own. A pool helps data asked for twice; read-ahead helps a
+// file streamed through once, which no pool can. The depth is a trade in both
+// directions — too shallow still pays the card's per-request toll, too deep
+// fetches sectors nobody wants — so it is measured, not assumed. The cache
+// holds it in proportion to the pool whatever is asked for here.
+extern "C" unsigned rapi_cache_readahead_kb;
 
 #endif

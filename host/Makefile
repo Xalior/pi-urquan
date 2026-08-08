@@ -95,17 +95,6 @@ HOST_SRCS = main.cpp kernel.cpp defaults.cpp circle_syscalls.cpp \
 	circle_stubs.cpp
 HOST_OBJS = $(addprefix $(OBJDIR)/,$(HOST_SRCS:.cpp=.o))
 
-# The SD card's read cache, which lives in circle-libsdl2 rather than here.
-#
-# It is not part of SDL and does not use it: it is Circle device-layer code
-# that wraps the card and is picked up by name, so FatFs and every file the
-# game opens go through it without knowing. It is kept in that repository
-# because that is where the shared pieces are today, and it is compiled
-# straight into this kernel — there is no library to link, and no other port
-# has to agree with this one about how it is built.
-DISKCACHE_DIR = $(SHIM)/circle-diskcache
-DISKCACHE_OBJ = $(OBJDIR)/diskcache.o
-
 # The Ur-Quan Masters' own source list.
 #
 # Upstream has no CMake and no configure script: it carries a shell-based
@@ -398,7 +387,7 @@ VORBIS_SRCS = $(addprefix lib/, \
 	sharedbook.c smallft.c synthesis.c window.c vorbisfile.c)
 VORBIS_OBJS = $(addprefix $(OBJDIR)/libvorbis/,$(VORBIS_SRCS:.c=.o))
 
-OBJS = $(HOST_OBJS) $(DISKCACHE_OBJ) $(UQM_OBJS) $(ZLIB_OBJS) $(PNG_OBJS) \
+OBJS = $(HOST_OBJS) $(UQM_OBJS) $(ZLIB_OBJS) $(PNG_OBJS) \
 	$(OGG_OBJS) $(VORBIS_OBJS)
 
 STANDARD = -std=gnu++17
@@ -416,6 +405,19 @@ OPTIMIZE = -O2
 # there is only ever one recipe for the image.
 SDL_APP_IMAGE := $(TARGET)
 TARGET := $(OBJDIR)/.circle-unused
+
+# The SD card's read cache, which lives in circle-libsdl2 rather than here.
+#
+# It is not part of SDL and does not use it: it is Circle device-layer code
+# that wraps the card and is picked up by name, so FatFs and every file the
+# game opens go through it without knowing.
+#
+# On the line before Rules.mk because that is where its own makefile fragment
+# says to put it: Rules.mk works out its dependency list from OBJS as it reads
+# it, so a source added afterwards is one make never checks. The fragment
+# finds its own directory and adds everything else itself.
+include $(SHIM)/circle-diskcache/diskcache.mk
+
 include $(CIRCLEHOME)/Rules.mk
 TARGET := $(SDL_APP_IMAGE)
 
@@ -462,7 +464,6 @@ DEFINE += -DRAPI_GAME_DIR='"$(RAPI_GAME_DIR)"'
 # SDL2/-prefixed one, because the game spells its includes "SDL.h".
 INCLUDE := -I $(UQM)/src/regex \
 	-I $(SHIM)/include -I $(SHIM)/include/SDL2 \
-	-I $(DISKCACHE_DIR) \
 	-I $(CURDIR)/uqmconf -I $(CURDIR)/pngconf -I $(CURDIR)/oggconf \
 	-I $(UQM)/src -I $(UQM) \
 	-I $(ZLIB) -I $(LIBPNG) \
@@ -585,16 +586,6 @@ $(OBJDIR)/%.o: %.cpp | $(OBJDIR)
 	@$(CPP) $(CPPFLAGS) -c -o $@ $<
 
 $(OBJDIR)/%.d: %.cpp | $(OBJDIR)
-	@$(CPP) $(CPPFLAGS) -M -MG -MT $(@:.d=.o) -MT $@ -MF $@ $<
-
-# The disk cache, which lives outside this directory. Its own rule because
-# the pattern rule above only reaches sources beside this makefile, and its
-# object and dependency file go in this board's tree like every other.
-$(DISKCACHE_OBJ): $(DISKCACHE_DIR)/diskcache.cpp | $(OBJDIR)
-	@echo "  CPP   $@"
-	@$(CPP) $(CPPFLAGS) -c -o $@ $<
-
-$(OBJDIR)/diskcache.d: $(DISKCACHE_DIR)/diskcache.cpp | $(OBJDIR)
 	@$(CPP) $(CPPFLAGS) -M -MG -MT $(@:.d=.o) -MT $@ -MF $@ $<
 
 # One pair of rules per upstream tree, each mirroring that tree's own
