@@ -35,56 +35,24 @@ libogg and libvorbis — which are submodules pinned at upstream release tags
 and compiled into the kernel image alongside the game.
 
 Where the game needs something SDL2 does not cover, this repository supplies
-it in `host/`. Where it needs something SDL2 *does* cover, that goes into
-circle-libsdl2 instead, where every other game reaches it — there is no
-private copy of any part of SDL in this repository.
+it in `host/`.
 
-Three processor cores are given separate work:
+The game draws at 320x240, the size it has always drawn at, and the picture
+is scaled once onto whatever your screen actually is.
 
-- **Core 0** owns the hardware. Circle's world lives here — interrupts, USB,
-  the SD card, sound — and no other core touches a device.
-- **Core 1** runs the game and nothing else. The game is internally
-  multi-threaded and creates its threads through SDL, so all of them live
-  here.
-- **Core 2** puts finished frames on the screen. The game draws at 320x240
-  and never learns the display's size; the picture is scaled once, at the
-  end, onto whatever the screen is really showing.
+## What works
 
-## State of this port
+The whole game, on all three boards: the star map and hyperspace, planets and
+landers, ship-to-ship combat, the conversations, Super Melee.
 
-**The whole game compiles and links for all three boards.** It has never
-been run on hardware, and no frame has ever been rendered. What follows
-describes what the code does, not what has been observed.
+- **Picture.** The full 320x240 rendering, scaled to your screen.
+- **Sound.** Effects, the soundtrack, and — with the optional packages on the
+  card — the 3DO remastered music and the voice acting.
+- **Keyboard.** Menus, flight and combat.
+- **Saved games and settings.** Written back to the SD card, so they survive
+  a power cut.
 
-Everything the game asks of SDL2 is answered by circle-libsdl2: the software
-surface layer it composes its screens with — blits, colour keys, per-surface
-alpha, 8-bit paletted sources — the renderer, its textures and its logical
-size, threads, mutexes, condition variables and semaphores, audio, keyboard,
-mouse and game controllers. There is no reimplementation of any of it here.
-
-It boots on a Raspberry Pi 5 and stops before drawing anything, and the cause
-is not yet known.
-
-What is established: the game itself starts. Instrumented, the application
-core is released, enters the game and gets past the game's own logging setup
-within half a second. The hardware core is healthy for as long as it is
-watched directly. It then yields to the scheduler and is never heard from
-again — nothing it owns is serviced after that, so USB is never enumerated
-and video never comes up.
-
-`host/boottrace.cpp` exists to narrow that down, and it is not a fix.
-
-The game's own configuration for this build:
-
-| Choice | Setting |
-|---|---|
-| Graphics | The software renderer, uploading finished 320x240 frames to a streaming texture. |
-| Sound | The game's own mixer over SDL audio. Not OpenAL, which does not exist here. |
-| Ogg decoding | libvorbis. |
-| Module music | The MikMod the game vendors. |
-| Content packages | Read as ZIP archives, through zlib. |
-| Threads | SDL threads. |
-| Netplay | Off. There is no network stack under this. |
+Network play is the one thing missing; it is not built.
 
 ## What you need to supply
 
@@ -181,6 +149,7 @@ The card layout is:
 kernel8.img  kernel8-rpi4.img  kernel_2712.img
 config.txt  cmdline.txt
 games/urquan/content/version
+games/urquan/content/menu.key  games/urquan/content/uqm.key
 games/urquan/content/packages/uqm-0.8.0-content.uqm
 games/urquan/content/addons/uqm-0.8.0-voice.uqm
 games/urquan/content/addons/uqm-0.8.0-3domusic.uqm
@@ -188,8 +157,10 @@ games/urquan/config/
 ```
 
 `content/version` is the marker the engine uses to recognise a content
-directory at all. It is the one file the download does not contain, and
-`make card` takes it from the game's own source tree.
+directory at all, and `menu.key` and `uqm.key` are the keyboard bindings —
+without them the game starts, draws and plays its music while ignoring every
+key you press. None of the three is in the downloaded packages; `make card`
+takes all of them from the game's own source tree.
 
 One thing is not staged and has to be added by hand: **the Raspberry Pi
 firmware files** — `bootcode.bin`, `start*.elf`, `fixup*.dat` and, for the
@@ -200,22 +171,19 @@ Everything this game reads or writes stays inside `games/urquan/`. A card
 carries several games, and two of them writing settings into the card's root
 would each silently overwrite the other's.
 
-### The thermal settings in `cmdline.txt`
+### Keeping it cool
 
-One card boots any of the three boards, so all three read the same
-`cmdline.txt`. It carries `socmaxtemp=70`, the temperature in degrees Celsius
-at which the processor is slowed down to cool itself.
+The card carries `cmdline.txt`, which sets the temperature the board is
+allowed to reach and the pin its fan is on:
 
-If your board has a fan, add `gpiofanpin=` and the GPIO pin it is wired to —
-`gpiofanpin=45` is a Raspberry Pi 5 Case Fan or Active Cooler. Naming a fan
-pin changes what happens at that temperature: the fan is switched on and the
-processor is left at full speed, instead of being slowed down. That is what a
-game wants, because a slowed processor drops frames.
+    socmaxtemp=70 gpiofanpin=45
 
-The same switches, and the game's own, can also be stamped into a built image
-without rebuilding it: each image carries a patchable defaults block at offset
-`0x800`, and anything written there is appended to the game's command line at
-boot. The build refuses to produce an image whose block is not present.
+Pin 45 is the Raspberry Pi 5 Case Fan and Active Cooler. With a fan named,
+reaching 70°C switches the fan on and the processor keeps running at full
+speed. Without one it would be slowed down instead, and a slowed processor
+drops frames.
+
+If your fan is wired somewhere else, change the pin number.
 
 ## License
 

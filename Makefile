@@ -255,6 +255,12 @@ netboot: rpi5
 # game reports that it cannot find its content and stops, whatever else is
 # in place.
 #
+# menu.key and uqm.key come from the same place and matter as much. They are
+# the keyboard bindings — which key is "select", which is "cancel", which
+# move the cursor — and the game reads them from the content directory's
+# root. Without them it starts, draws, plays its music and then ignores
+# every key pressed, silently and with nothing on screen to say why.
+#
 # This target downloads nothing. It copies what `make media` left and names
 # what is absent.
 CARD_DIR  = build/sd-card
@@ -269,6 +275,7 @@ card: kernels
 	@cp host/build/rpi5/$(IMAGE_rpi5) $(CARD_DIR)/
 	@cp host/config.txt host/cmdline.txt $(CARD_DIR)/
 	@cp uqm/sc2/content/version $(CARD_CONTENT)/version
+	@cp uqm/sc2/content/menu.key uqm/sc2/content/uqm.key $(CARD_CONTENT)/
 	@echo "  STAGED $(CARD_DIR)/"
 	@if [ -f "$(MEDIA_DIR)/$(CONTENT_UQM)" ]; then \
 		cp "$(MEDIA_DIR)/$(CONTENT_UQM)" $(CARD_CONTENT)/packages/; \
